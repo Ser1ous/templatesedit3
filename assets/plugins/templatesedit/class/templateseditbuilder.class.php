@@ -127,9 +127,9 @@ class templateseditbuilder
     public function getSelectRole()
     {
         $users = [];
-        $sql = $this->evo->db->select('id, name', $this->evo->getFullTableName('user_roles'), '', 'id asc');
-        if ($this->evo->db->getRecordCount($sql)) {
-            while ($row = $this->evo->db->getRow($sql)) {
+        $roles = \EvolutionCMS\Models\UserRole::query()->select('id', 'name')->orderBy('id', 'asc')->get();
+        if ($roles->count() > 1) {
+            foreach ($roles->toArray() as $row) {
                 $pf = '&nbsp;&nbsp;&nbsp; ';
                 if (is_file($this->basePath . 'configs/template__' . $this->params['id'] . '__' . $row['id'] . '.json')) {
                     $pf = '★ ';
@@ -245,17 +245,18 @@ class templateseditbuilder
         global $_lang;
 
         if ($this->params['id']) {
-            $sql = $this->evo->db->query('
-            SELECT tv.id, tv.name, tv.caption AS title, tv.description, tv.category
-            FROM ' . $this->evo->getFullTableName('site_tmplvar_templates') . ' AS tt
-            LEFT JOIN ' . $this->evo->getFullTableName('site_tmplvars') . ' AS tv ON tv.id=tt.tmplvarid
-            WHERE templateid=' . $this->params['id'] . '
-            ORDER BY tt.rank DESC, tv.rank DESC, tv.caption DESC, tv.id DESC
-            ');
+            $result = \EvolutionCMS\Models\SiteTmplvarTemplate::query()->select('site_tmplvars.id',
+                 'site_tmplvars.name',  'site_tmplvars.caption as title', 'site_tmplvars.description', 'site_tmplvars.category')
+                ->leftJoin('site_tmplvars', 'site_tmplvars.id','=', 'site_tmplvar_templates.tmplvarid')
+                ->where('templateid', $this->params['id'])
+                ->orderBy('site_tmplvar_templates.rank', 'DESC')
+                ->orderBy('site_tmplvars.rank', 'DESC')
+                ->orderBy('site_tmplvars.caption', 'DESC')
+                ->orderBy('site_tmplvars.id', 'DESC')->get();
 
             $this->default_categories = [];
-            if ($this->evo->db->getRecordCount($sql)) {
-                while ($row = $this->evo->db->getRow($sql)) {
+            if ($result->count()) {
+                foreach ($result->toArray() as $row) {
                     $this->default_tvars[$row['name']] = $row;
                     $this->default_categories[$row['category']] = $row['category'];
                 }
@@ -273,14 +274,11 @@ class templateseditbuilder
     protected function getDefaultCategories()
     {
         if (!empty($this->default_categories)) {
-            $sql = $this->evo->db->query('
-            SELECT *, category AS title
-            FROM ' . $this->evo->getFullTableName('categories') . '
-            ORDER BY category
-            ');
+            $result = \EvolutionCMS\Models\Category::query()->select('categories.*', 'category AS title')
+                ->orderBy('categorry')->get();
 
-            if ($this->evo->db->getRecordCount($sql)) {
-                while ($row = $this->evo->db->getRow($sql)) {
+            if ($result->count()) {
+                foreach ($result->toArray() as $row) {
                     $this->default_categories[$row['id']] = $row;
                 }
             }

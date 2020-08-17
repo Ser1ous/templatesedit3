@@ -229,15 +229,28 @@ class templatesedit
         if (!empty($_SESSION['mgrDocgroups'])) {
             $docgrp = implode(',', $_SESSION['mgrDocgroups']);
         }
+        $result = \EvolutionCMS\Models\SiteTmplvar::query()->select('site_tmplvars.id', 'site_tmplvars.default_text', 'site_tmplvar_contentvalues.value', 'site_tmplvar_templates.rank')
+            ->join('site_tmplvar_templates', 'site_tmplvar_templates.tmplvarid', '=', 'site_tmplvars.id')
+            ->leftJoin('site_tmplvar_contentvalues', function ($join) {
+                $join->on('site_tmplvar_contentvalues.tmplvarid', '=', 'site_tmplvars.room_type_id');
+                $join->on('site_tmplvar_contentvalues.contentid', '=', $this->doc['id']);
 
-        $sql = $this->evo->db->select('
-        DISTINCT tv.*, IF(tvc.value!="",tvc.value,tv.default_text) as value, tvtpl.rank', $this->evo->getFullTableName('site_tmplvars') . ' AS tv
-        INNER JOIN ' . $this->evo->getFullTableName('site_tmplvar_templates') . ' AS tvtpl ON tvtpl.tmplvarid = tv.id
-        LEFT JOIN ' . $this->evo->getFullTableName('site_tmplvar_contentvalues') . ' AS tvc ON tvc.tmplvarid=tv.id AND tvc.contentid="' . $this->doc['id'] . '"
-        LEFT JOIN ' . $this->evo->getFullTableName('site_tmplvar_access') . ' AS tva ON tva.tmplvarid=tv.id', 'tvtpl.templateid="' . $this->doc['template'] . '" AND (1="' . $_SESSION['mgrRole'] . '" OR ISNULL(tva.documentgroup)' . (!$docgrp ? '' : ' OR tva.documentgroup IN (' . $docgrp . ')') . ')', 'tvtpl.rank, tv.rank, tv.id');
+            })
+            ->leftJoin('site_tmplvar_access', 'site_tmplvar_access.tmplvarid', '=', 'site_tmplvars.id')
+            ->where('site_tmplvar_templates.templateid', $this->doc['template']);
+        if ($_SESSION['mgrRole'] != 1 && $docgrp) {
+            $result = $result->where(function ($query) {
+                $query->whereNull('site_tmplvar_access.documentgroup')
+                    ->orWhereIn('site_tmplvar_access.documentgroup', $_SESSION['mgrDocgroups']);
+            });
+        }
+        $result->orderBy('site_tmplvar_templates.rank')
+            ->orderBy('site_tmplvars.rank')
+            ->orderBy('site_tmplvars.id');
 
-        if ($this->evo->db->getRecordCount($sql)) {
-            while ($row = $this->evo->db->getRow($sql)) {
+        if ($result->count()) {
+            foreach ($result->toArray() as $row) {
+                if ($row['value'] == '') $row['value'] = $row['default_text'];
                 $this->categories[$row['category']][$row['name']] = $row;
                 $this->tvars[$row['name']] = $row;
             }
@@ -609,9 +622,13 @@ class templatesedit
                         break;
 
                     case 'template':
-                        $rs = $this->evo->db->select('t.templatename, t.id, c.category', $this->evo->getFullTableName('site_templates') . ' AS t LEFT JOIN ' . $this->evo->getFullTableName('categories') . ' AS c ON t.category = c.id', 't.selectable=1', 'c.category, t.templatename ASC');
+                        $result = \EvolutionCMS\Models\SiteTemplate::query()->select('site_templates.templatename',  'site_templates.id', 'categories.category')
+                            ->leftJoin('categories', 'site_templates.category','=','categories.id')
+                            ->where('site_templates.selectable',  1)
+                            ->orderBy('categories.category')->orderBy('site_templates.templatename', 'ASC')->get();
+
                         $optgroup = [];
-                        while ($row = $this->evo->db->getRow($rs)) {
+                        foreach ($result->toArray() as $row) {
                             $category = !empty($row['category']) ? $row['category'] : $_lang['no_category'];
                             $optgroup[$category][$row['id']] = $row['templatename'] . ' (' . $row['id'] . ')';
                         }
@@ -639,9 +656,8 @@ class templatesedit
                         } else {
                             $this->doc['parent'] = 0;
                         }
-                        if ($parentlookup !== false && is_numeric($parentlookup)) {
-                            $rs = $this->evo->db->select('pagetitle', $this->evo->getFullTableName('site_content'), "id='{$parentlookup}'");
-                            $parentname = $this->evo->db->getValue($rs);
+                        if ($parentlookup !== false && is_numeric($parentlookup) && $parentlookup != 0) {
+                            $parentname = \EvolutionCMS\Models\SiteContent::query()->find($parentlookup)->pagetitle;
                             if (!$parentname) {
                                 $this->evo->webAlertAndQuit($_lang["error_no_parent"]);
                             }
@@ -1020,21 +1036,17 @@ class templatesedit
     {
         $out = '';
         $separator = is_bool($separator) ? ', ' : $this->evo->htmlspecialchars($separator);
+        $result = \EvolutionCMS\Models\SiteTmplvarContentvalue::query()
+            ->select('value')->where('tmplvarid', $id)->groupBy('value')
+            ->orderBy('value', 'ASC');
 
-        $rs = $this->evo->db->query('
-        SELECT value 
-        FROM ' . $this->evo->getFullTableName('site_tmplvar_contentvalues') . '
-        WHERE tmplvarid=' . $id . '
-        GROUP BY value
-        ORDER BY value ASC
-        ');
 
-        if ($this->evo->db->getRecordCount($rs)) {
+        if ($result->count() > 0) {
             $out .= '<div class="choicesList" data-target="tv' . $id . '" data-separator="' . $separator . '">';
             $separator = trim(htmlspecialchars_decode($separator));
             $value = trim($value, $separator);
             $list = [];
-            while ($row = $this->evo->db->getRow($rs)) {
+            foreach ($result->get()->toArray() as $row) {
                 $list = array_merge($list, array_map('trim', explode($separator, $row['value'])));
             }
             $list = array_unique($list);
@@ -1070,7 +1082,7 @@ class templatesedit
                                 if (is_array($v)) {
                                     $v = implode('||', $v);
                                 }
-                                $data[$k] = $this->evo->db->escape($v);
+                                $data[$k] = $v;
                             } else {
                                 $data[$k] = isset($v['default']) ? $v['default'] : '';
                             }
@@ -1080,7 +1092,7 @@ class templatesedit
             }
 
             if (!empty($data)) {
-                $this->evo->db->update($data, '[+prefix+]site_content', 'id=' . $id);
+                \EvolutionCMS\Models\SiteContent::query()->where('id', $id)->update($data);
             }
         }
     }

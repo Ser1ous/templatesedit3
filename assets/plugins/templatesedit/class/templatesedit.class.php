@@ -232,8 +232,8 @@ class templatesedit
         $result = \EvolutionCMS\Models\SiteTmplvar::query()->select('site_tmplvars.id', 'site_tmplvars.default_text', 'site_tmplvar_contentvalues.value', 'site_tmplvar_templates.rank')
             ->join('site_tmplvar_templates', 'site_tmplvar_templates.tmplvarid', '=', 'site_tmplvars.id')
             ->leftJoin('site_tmplvar_contentvalues', function ($join) {
-                $join->on('site_tmplvar_contentvalues.tmplvarid', '=', 'site_tmplvars.room_type_id');
-                $join->on('site_tmplvar_contentvalues.contentid', '=', $this->doc['id']);
+                $join->on('site_tmplvar_contentvalues.tmplvarid', '=', 'site_tmplvars.id');
+                $join->on('site_tmplvar_contentvalues.contentid', '=', DB::raw($this->doc['id']));
 
             })
             ->leftJoin('site_tmplvar_access', 'site_tmplvar_access.tmplvarid', '=', 'site_tmplvars.id')
@@ -249,7 +249,7 @@ class templatesedit
             ->orderBy('site_tmplvars.id');
 
         if ($result->count()) {
-            foreach ($result->toArray() as $row) {
+            foreach ($result->get()->toArray() as $row) {
                 if ($row['value'] == '') $row['value'] = $row['default_text'];
                 $this->categories[$row['category']][$row['name']] = $row;
                 $this->tvars[$row['name']] = $row;

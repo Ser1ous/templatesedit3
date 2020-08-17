@@ -275,7 +275,7 @@ class templateseditbuilder
     {
         if (!empty($this->default_categories)) {
             $result = \EvolutionCMS\Models\Category::query()->select('categories.*', 'category AS title')
-                ->orderBy('categorry')->get();
+                ->orderBy('category')->get();
 
             if ($result->count()) {
                 foreach ($result->toArray() as $row) {

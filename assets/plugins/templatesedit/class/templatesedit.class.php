@@ -229,7 +229,7 @@ class templatesedit
         if (!empty($_SESSION['mgrDocgroups'])) {
             $docgrp = implode(',', $_SESSION['mgrDocgroups']);
         }
-        $result = \EvolutionCMS\Models\SiteTmplvar::query()->select('site_tmplvars.id', 'site_tmplvars.default_text', 'site_tmplvar_contentvalues.value', 'site_tmplvar_templates.rank')
+        $result = \EvolutionCMS\Models\SiteTmplvar::query()->select('site_tmplvars.*', 'site_tmplvars.default_text', 'site_tmplvar_contentvalues.value', 'site_tmplvar_templates.rank')
             ->join('site_tmplvar_templates', 'site_tmplvar_templates.tmplvarid', '=', 'site_tmplvars.id')
             ->leftJoin('site_tmplvar_contentvalues', function ($join) {
                 $join->on('site_tmplvar_contentvalues.tmplvarid', '=', 'site_tmplvars.id');
